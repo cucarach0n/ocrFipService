@@ -4,7 +4,7 @@ from .base import *
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['fipservice.ddns.net',"api.fip.uni.edu.pe","localhost"]
 
 DATABASES = {
     'default': {

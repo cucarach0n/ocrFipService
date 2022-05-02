@@ -6,6 +6,8 @@ import threading
 import requests
 from apps.servicioOcr.util import DocumentoOCR
 from decouple import config
+from django.core.files.storage import FileSystemStorage
+from django.conf import settings
 def extraerOcr(file,slug):
     documento = DocumentoOCR(file)
     text = documento.obtenerTexto()
@@ -18,8 +20,6 @@ def extraerOcr(file,slug):
     res = requests.put(config('URL_SERVER')+'/file/ocrService/'+slug+"/",data=data)
     print(res.text)
 
-    print(text)
-
 
 class FileOcrViewSet(viewsets.GenericViewSet):
     serializer_class = ocrExtractSerializer
@@ -28,8 +28,11 @@ class FileOcrViewSet(viewsets.GenericViewSet):
     def create(self,request):
         serializer = self.serializer_class(data=request.data)
         if serializer.is_valid():
-            
-            file = request.FILES['document']
-            threading_text = threading.Thread(target=extraerOcr,args=(file,serializer.validated_data['slug'],))
+            ruta = settings.MEDIA_ROOT+'files/'
+            fs = FileSystemStorage(location=ruta)
+            file = fs.save(request.FILES['document'].name,request.FILES['document'])
+            fileurl =fs.get_valid_name(file)
+            print(fileurl)
+            threading_text = threading.Thread(target=extraerOcr,args=(fileurl,serializer.validated_data['slug'],))
             threading_text.start()
             return Response({"mensaje":"Contenido extraido correctamente"}, status=status.HTTP_200_OK)

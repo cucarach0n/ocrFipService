@@ -11,7 +11,7 @@ from django.utils.crypto import get_random_string
 import platform
 from django.db.models import Q
 
-os.environ['OMP_THREAD_LIMIT'] = '1'
+os.environ['OMP_THREAD_LIMIT'] = '2'
 sistema = platform.system()
 if(sistema == "Windows"):
     pytesseract.pytesseract.tesseract_cmd = config('TESSERACT_CMD_PATH')#r'C:\Program Files\Tesseract-OCR\tesseract'
@@ -21,19 +21,19 @@ class DocumentoOCR():
     def __init__(self,ruta):
         self.PDF_file = ruta
     def obtenerTexto(self):
-        #doc = self.PDF_file
-        #absURl = settings.MEDIA_ROOT +'files'  + doc
+        doc = self.PDF_file
+        absURl = settings.MEDIA_ROOT +'files/'  + doc
         print('obteniendo texto de ')
         if(sistema == "Windows"):
-            pages = convert_from_bytes(
-                self.PDF_file.read(),
-                thread_count=8,
+            pages = convert_from_path(
+                absURl,
+                thread_count=5,
                 poppler_path=config('POPPLER_PATH_WINDOWS')
             )
         else:
-            pages = convert_from_bytes(
-                self.PDF_file.read(),
-                thread_count=8
+            pages = convert_from_path(
+                absURl,
+                thread_count=5
             )
 
         image_counter = 1
