@@ -14,20 +14,20 @@ class FileOcrViewSet(viewsets.GenericViewSet):
     def create(self,request):
         serializer = self.serializer_class(data=request.data)
         if serializer.is_valid():
-            ruta = settings.MEDIA_ROOT+'files/'
+            '''ruta = settings.MEDIA_ROOT+'files/'
             fs = FileSystemStorage(location=ruta)
             nameFile = normalisarNameDocument(request.FILES['document'].name)
             file = fs.save(nameFile,request.FILES['document'])
-            fileurl =fs.get_valid_name(file)
-            #file = request.FILES['document']
+            fileurl =fs.get_valid_name(file)'''
+            file = request.FILES['document'].read()
 
-            print(fileurl + " guardado!")
+            #print(fileurl + " guardado!")
             
             '''t = newThread("Thread "+ serializer.validated_data['slug'], 1,fileurl,serializer.validated_data['slug'])
             t.start()
             t.join()'''
             print(f'Active Threads: {threading.active_count()}')
-            t = threading.Thread(target=extraerOcr,args=(fileurl,serializer.validated_data['slug'],))
+            t = threading.Thread(target=extraerOcr,args=(file,serializer.validated_data['slug'],))
             t.start()
             '''threads = list()
             threading_text = threading.Thread(target=extraerOcr,args=(fileurl,serializer.validated_data['slug'],))
@@ -39,12 +39,13 @@ class FileOcrViewSet(viewsets.GenericViewSet):
                 thread.join()'''
 
             print(f'Active Threads: {threading.active_count()}')
-            del ruta
+            '''del ruta
             del fs
             del nameFile
             del file
             del fileurl
-            del serializer
+            del serializer'''
+            del file
             gc.collect()
             return Response({"mensaje":"Contenido extraido correctamente"}, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
