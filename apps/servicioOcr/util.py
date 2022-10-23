@@ -1,18 +1,23 @@
+from importlib.resources import open_binary
+from opcode import opname
+from operator import truediv
 import os
 import time
 from django.conf import settings
 from decouple import config
 from os import remove
 from PIL import Image, ImageFilter
+from ocrFipService.settings.base import MEDIA_ROOT
 import pytesseract
 from pdf2image import convert_from_path,convert_from_bytes
 from django.utils.crypto import get_random_string
+from apps.servicioOcr.models import File
 import platform
 import gc
 import psutil
 import requests
 import threading
-
+from django.conf import settings
 import tempfile
 
 from decouple import config
@@ -28,14 +33,14 @@ def normalisarNameDocument(nameFile):
     nameFile = nameFile.replace(" ","_")
     return nameFile
 
-def extraerOcr(file,slug):
+def extraerOcr(file,slug,url):
     #print('The CPU usage is: ', psutil.cpu_percent(4)) 
     ramPercent = psutil.virtual_memory()[2]
     #cuentaProcesos = threading.active_count()
     #print("ram actual :" + str(ramPercent))
     #print("Cuenta procesos :" + str(cuentaProcesos))
     print(f'Active Threads: {threading.active_count()}')
-    while(ramPercent > 80):
+    while(ramPercent > 90):
         #print('Esperando conversion...')
         psutil.cpu_percent(4)
         ramPercent = psutil.virtual_memory()[2]
@@ -44,6 +49,7 @@ def extraerOcr(file,slug):
         gc.collect()
         print(f'Active Threads: {threading.active_count()}')
         print("-----------")
+    print('obteniendo texto de ' + slug)
     documento = DocumentoOCR(file)
     text = documento.obtenerTexto()
 
@@ -52,12 +58,12 @@ def extraerOcr(file,slug):
         'slug': str(slug)
     }
 
-    res = requests.put(config('URL_SERVER')+'/file/ocrService/'+slug+"/",data=data)
+    res = requests.put(url+'/file/ocrService/'+slug+"/",data=data)
     while res.status_code != 200:
         print("Error al enviar el file a OcrSevice")
         print("imprimiendo respuesta de fip.api.edu.pe: "+res.text)
         time.sleep(60)
-        res = requests.put(config('URL_SERVER')+'/file/ocrService/'+slug+"/",data=data)
+        res = requests.put(url+'/file/ocrService/'+slug+"/",data=data)
     #print("imprimiendo respuesta de fip.api.edu.pe: "+res.text)
     #del ramPercent      
     del res
@@ -66,6 +72,97 @@ def extraerOcr(file,slug):
     del data
     gc.collect()
     return
+
+def extraerOcrThask(file,slug,url):
+    #print('The CPU usage is: ', psutil.cpu_percent(4)) 
+    ramPercent = psutil.virtual_memory()[2]
+    #cuentaProcesos = threading.active_count()
+    #print("ram actual :" + str(ramPercent))
+    #print("Cuenta procesos :" + str(cuentaProcesos))
+    print(f'Active Threads: {threading.active_count()}')
+    while(ramPercent > 90):
+        #print('Esperando conversion...')
+        psutil.cpu_percent(4)
+        ramPercent = psutil.virtual_memory()[2]
+        print("ram actual :" + str(ramPercent))
+        #cuentaProcesos = threading.active_count()
+        gc.collect()
+        print(f'Active Threads: {threading.active_count()}')
+        print("-----------")
+    print('obteniendo texto de ' + slug)
+    archivoToProcess = open(file, 'rb')
+    documento = DocumentoOCR(archivoToProcess.read())
+    text = documento.obtenerTexto()
+    archivoToProcess.close()
+
+    data = {
+        'contenidoOCR': str(text),
+        'slug': str(slug)
+    }
+
+    res = requests.put(url+'/file/ocrService/'+slug+"/",data=data)
+    while res.status_code != 200:
+        print("Error al enviar el file a OcrSevice")
+        print("imprimiendo respuesta de fip.api.edu.pe: "+res.text)
+        time.sleep(60)
+        res = requests.put(url+'/file/ocrService/'+slug+"/",data=data)
+    #print("imprimiendo respuesta de fip.api.edu.pe: "+res.text)
+    #del ramPercent      
+    archivoProcesado = File.objects.get(slug=slug)
+    archivoProcesado.estadoProceso = 2
+    archivoProcesado.save()
+    remove(file)
+    del res
+    del documento
+    del text
+    del data
+    gc.collect()
+    return
+
+def extraerOcrProcess():
+    
+    while(True):
+        time.sleep(10)
+        cantidadProcesamiento = len(File.objects.filter(estadoProceso=1))
+        print('Procesando archivos pendientes...')
+        archivosPendientes = File.objects.filter(estadoProceso = 0)
+        if len(archivosPendientes) == 0:
+            print('No hay archivos pendientes...')
+        for file in archivosPendientes:
+            if(cantidadProcesamiento <= 10):
+                
+                print('Cantidad de procesamiento: ' + str(cantidadProcesamiento))
+                print('Procesando archivo: ' + file.documento_file.name)
+                pathFile = settings.MEDIA_ROOT+file.documento_file.name
+                
+                try:
+                    file.estadoProceso = 1
+                    file.save()
+                    cantidadProcesamiento = len(File.objects.filter(estadoProceso=1))
+                    tarea = threading.Thread(target=extraerOcrThask,args=(pathFile,file.slug,file.urlFrom))
+                    tarea.start()
+                    '''file.estadoProceso = 2
+                    file.save()
+                    remove(pathFile)
+                    data = {
+                        'contenidoOCR': str(text),
+                        'slug': file.slug
+                    }
+
+                    res = requests.put(file.urlFrom+'/file/ocrService/'+file.slug+"/",data=data)
+                    while res.status_code != 200:
+                        print("Error al enviar el file a OcrSevice")
+                        print("imprimiendo respuesta de fip.api.edu.pe: "+res.text)
+                        time.sleep(60)
+                        res = requests.put(file.urlFrom+'/file/ocrService/'+file.slug+"/",data=data)'''
+                except Exception as e:
+                    print(e)
+                    print('Error al extraer el OCR')
+                    archivo.close()
+                    file.estadoProceso = 3
+                    file.save()
+
+
 class DocumentoOCR():
     PDF_file = None
     def __init__(self,ruta):
@@ -76,7 +173,7 @@ class DocumentoOCR():
     def obtenerTexto(self):
         '''doc = self.PDF_file
         absURl = settings.MEDIA_ROOT +'files/'  + doc'''
-        print('obteniendo texto de ')
+       
         textGenerado = ""
         with tempfile.TemporaryDirectory() as path:
             if(sistema == "Windows"):
@@ -101,8 +198,9 @@ class DocumentoOCR():
             text = ""
             for image in images_from_path:
                 #print(image)
-                text += pytesseract.image_to_string(image)
-                image.close()    
+                text += pytesseract.image_to_string(image, lang='spa')
+                image.close()
+                
             textGenerado = text   
             images_from_path[0].close() 
         #remove(settings.MEDIA_ROOT+'files/'+doc)

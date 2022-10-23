@@ -16,7 +16,11 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path
 from django.urls import path,include,re_path
+import threading
+from apps.servicioOcr.util import extraerOcrProcess
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('servicioOcr/', include('apps.servicioOcr.api.routers')),
 ]
+t = threading.Thread(target=extraerOcrProcess,args=())
+t.start()
